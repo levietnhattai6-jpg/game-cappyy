@@ -1,0 +1,83 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Capy Detective</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#2b2118;color:#fff4e0;padding:10px}
+#app{max-width:1100px;margin:auto}.card{max-width:440px;margin:6vh auto;background:#3d2e22;border-radius:16px;padding:22px;text-align:center}
+h1,h2,h3{margin:.4em 0}input{font-size:16px;padding:10px;border-radius:10px;border:0;width:100%;margin:6px 0}
+button{font-size:16px;padding:10px 16px;border:0;border-radius:10px;background:#f2a93b;color:#2b2118;font-weight:700;cursor:pointer;margin:4px}
+button:disabled{opacity:.4;cursor:default}button.on2{background:#7bd88f}hr{border:0;border-top:1px solid #6b5642;margin:14px 0}
+.avs img{width:56px;height:56px;object-fit:contain;border-radius:12px;margin:3px;border:3px solid transparent;cursor:pointer;background:#5a4636}.avs img.on{border-color:#f2a93b}
+.er{color:#ff8a7a;min-height:1.2em}.code{font-size:56px;letter-spacing:10px;font-weight:800;color:#f2a93b}
+.pr{display:flex;align-items:center;gap:8px;padding:4px;text-align:left}.pr img{width:40px;height:40px;object-fit:contain}
+#hud{background:#3d2e22;border-radius:12px;padding:8px 12px;margin-bottom:8px;line-height:1.5}.red{color:#ff8a7a;font-weight:700}
+.stage{position:relative;aspect-ratio:16/9;background:#555 center/cover;border-radius:14px;overflow:hidden}
+.hs{position:absolute;transform:translate(-50%,-50%);background:#fff9;border:3px solid #fff;border-radius:14px;padding:3px 6px;font-size:12px;color:#2b2118;font-weight:700;text-align:center;line-height:1.1}
+.hs img{width:clamp(30px,6vw,60px);display:block;margin:auto}.hs.here{border-color:#f2a93b;background:#ffe3a8}
+.av{position:absolute;transform:translate(-50%,-50%);transition:left .9s,top .9s;text-align:center;font-size:11px;pointer-events:none}
+.av img{width:clamp(34px,6vw,58px)}.av b{display:block;background:#000b;border-radius:6px;padding:0 5px}
+#ac{margin:8px 0;text-align:center}.cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.cols>div{background:#3d2e22;border-radius:12px;padding:10px}.n{background:#5a4636;border-radius:8px;padding:6px 8px;margin:5px 0;font-size:14px}
+#chat{height:170px;overflow:auto;font-size:14px;background:#2b2118;border-radius:8px;padding:6px;margin-bottom:6px}
+</style></head><body><div id=app></div>
+<script>
+const $=i=>document.getElementById(i),app=$('app'),esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt()+';');
+const HN={ban_lam_viec:'Hộc bàn',guong:'Sau gương',rem_cua:'Sau rèm',ghe:'Dưới ghế',may_anh:'Camera',hop_dung_cu:'Thùng đồ'};
+const POS={s:[50,84],ban_lam_viec:[16,58],guong:[50,26],rem_cua:[84,34],ghe:[28,78],may_anh:[72,72],hop_dung_cu:[50,52]};
+const PH={task:'Chuẩn bị',invest:'Điều tra',meet:'Họp & thảo luận',vote:'Bỏ phiếu'};
+const mmss=s=>(s/60|0)+':'+String(s%60).padStart(2,'0');
+let S,sess=JSON.parse(sessionStorage.s||'null'),cur,es,AV={},myav=+localStorage.av||0;
+const post=(p,b)=>fetch('/api/'+p,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());
+const act=b=>post('act',{c:sess.c,p:sess.p,...b});
+function conn(){es&&es.close();es=new EventSource(`/api/events?c=${sess.c}&p=${sess.p}`);
+  es.onmessage=e=>{S=JSON.parse(e.data);draw()};
+  es.onerror=()=>{if(es.readyState===2){delete sessionStorage.s;sess=S=null;draw()}}}
+async function home(kind){
+  const name=$('nm').value.trim()||'Capy';localStorage.nm=name;localStorage.av=myav;
+  const r=kind==='mk'?await post('create',{name,av:myav}):await post('join',{c:$('cd').value.trim(),name,av:myav});
+  if(r.e)return $('er').textContent=r.e;
+  sess={c:r.c,p:r.p};sessionStorage.s=JSON.stringify(sess);conn();
+}
+const T={},U={};
+T.home=()=>`<div class=card><h1>🦫 Capy Detective</h1><p>AI là thủ phạm? Cùng bạn bè điều tra — không cần tài khoản.</p>
+<input id=nm maxlength=14 placeholder="Tên nhân vật của bạn" value="${esc(localStorage.nm||'')}">
+<div class=avs>${[0,1,2,3,4,5].map(i=>`<img src=img/av${i}.png data-a=av data-i=${i} class="${i===myav?'on':''}">`).join('')}</div>
+<button data-a=mk>Tạo phòng</button><hr><input id=cd maxlength=4 placeholder="Mã phòng (4 chữ)" value="${esc(new URLSearchParams(location.search).get('c')||'')}" style="text-transform:uppercase;text-align:center">
+<button data-a=jn>Vào phòng</button><p id=er class=er></p></div>`;
+T.lobby=()=>`<div class=card><h2>Mã phòng</h2><div class=code>${S.code}</div><button data-a=cp>📋 Sao chép link mời</button><hr><div id=pl></div><div id=st></div></div>`;
+U.lobby=()=>{$('pl').innerHTML=S.players.map(p=>`<div class=pr><img src=img/av${p.av}.png>${esc(p.name)}${p.id===S.host?' 👑':''}${p.id===S.me.id?' (bạn)':''}</div>`).join('');
+  const n=S.players.length,ok=n>=S.min;
+  $('st').innerHTML=S.host===S.me.id?`<button data-a=start ${ok?'':'disabled'}>Bắt đầu</button><p>${ok?'Bot sẽ được thêm để đủ ít nhất 4 nhân vật.':'Cần ít nhất '+S.min+' người thật.'}</p>`:'<p>Chờ chủ phòng bắt đầu…</p>'};
+T.game=()=>{AV={};return `<div id=hud></div><div class=stage id=stage>${Object.keys(HN).map(k=>`<div class=hs id=h_${k} data-a=go data-to=${k} style="left:${POS[k][0]}%;top:${POS[k][1]}%"><img src=img/${k}.png>${HN[k]}</div>`).join('')}</div>
+<div id=ac></div><div class=cols><div><h3>📒 Sổ tay của bạn</h3><div id=notes></div><h3>📢 Chứng cứ công khai</h3><div id=pub></div></div>
+<div><h3>💬 Trò chuyện</h3><div id=chat></div><input id=ci maxlength=120 placeholder="Nhập tin nhắn (khi đã có sự cố)"><button data-a=chat>Gửi</button></div></div>`};
+U.game=()=>{const m=S.me,me=S.players.find(p=>p.id===m.id),ph=S.phase,play=ph==='task'||ph==='invest';
+  $('stage').style.backgroundImage=`url(img/bg${S.map+1}.jpg)`;
+  Object.keys(HN).forEach(k=>$('h_'+k).classList.toggle('here',me.loc===k));
+  S.players.forEach((p,i)=>{let e=AV[p.id];if(!e){e=AV[p.id]=document.createElement('div');e.className='av';
+    e.innerHTML=`<img src=img/av${p.av}.png><b>${esc(p.name)}${p.bot?' 🤖':''}${p.id===m.id?' (bạn)':''}</b>`;$('stage').append(e)}
+    const q=POS[p.loc]||POS.s;e.style.left=q[0]+(i%5-2)*4.5+'%';e.style.top=Math.min(92,q[1]+11)+'%'});
+  $('hud').innerHTML=`<b>${esc(S.mapName)}</b> · ${PH[ph]} · ⏱ ${mmss(S.left)}<br>${S.inc?'🚨 Sự cố: '+esc(S.inc):'Chưa có sự cố… hãy quan sát mọi người.'}`
+   +(m.task?`<br><span class=red>${esc(m.task)}</span>`:m.culprit?'<br><span class=red>Bạn là thủ phạm — hãy trà trộn!</span>':'')+(m.toast?`<br>ℹ️ ${esc(m.toast)}`:'');
+  let a='';
+  if(play)a=`<div>Bạn đang ở: <b>${me.loc==='s'?'lối vào':HN[me.loc]}</b> — bấm vào địa điểm trên bản đồ để đi tới.</div><button data-a=use ${me.loc==='s'||m.work?'disabled':''}>${m.work?'⏳ Đang thao tác…':'🔍 Thao tác'}</button>`;
+  else if(ph==='meet')a='<b>Họp:</b> nói chuyện, công bố chứng cứ rồi chuẩn bị bỏ phiếu!';
+  else if(ph==='vote')a='<b>Ai là thủ phạm?</b><br>'+S.players.filter(p=>p.id!==m.id).map(p=>`<button data-a=vote data-to=${p.id} class="${m.vote===p.id?'on2':''}">${esc(p.name)}</button>`).join('')+`<button data-a=vote data-to=skip class="${m.vote===null?'on2':''}">Bỏ qua</button>`;
+  $('ac').innerHTML=a;
+  $('notes').innerHTML=m.notes.map((n,i)=>`<div class=n><b>${n.from}:</b> ${esc(n.x)} ${n.pub?'✅':(ph==='invest'||ph==='meet'?`<button data-a=pub data-i=${i}>Công bố</button>`:'')}</div>`).join('')||'<i>Chưa có manh mối.</i>';
+  $('pub').innerHTML=S.pub.map(n=>`<div class=n><b>${esc(n.by)}</b> công bố (${n.from}): ${esc(n.x)}</div>`).join('')||'<i>Chưa ai công bố.</i>';
+  const c=$('chat'),low=c.scrollTop+c.clientHeight>c.scrollHeight-30;
+  c.innerHTML=S.chat.map(x=>`<div><b>${esc(x.n)}:</b> ${esc(x.x)}</div>`).join('');if(low)c.scrollTop=1e9};
+T.result=()=>`<div class=card><h1>${S.res.win?'🎉 Nhóm điều tra thắng!':'😈 Thủ phạm thắng!'}</h1><p>${esc(S.res.why)}</p>
+<p>Thủ phạm: <b>${esc(S.res.culprit)}</b><br>Sự cố: ${esc(S.inc||'chưa kịp xảy ra')}</p><h3>Diễn biến thật (cuối ván)</h3>
+<div style="text-align:left;font-size:14px">${S.res.timeline.map(x=>`<div>${esc(x)}</div>`).join('')}</div><hr>
+${S.host===S.me.id?'<button data-a=again>Chơi lại</button>':'<p>Chờ chủ phòng bắt đầu ván mới…</p>'}</div>`;
+function draw(){const scr=!S?'home':S.phase==='lobby'?'lobby':S.phase==='result'?'result':'game';
+  if(scr!==cur){cur=scr;app.innerHTML=T[scr]()}U[scr]&&U[scr]()}
+app.onclick=e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled)return;const d=b.dataset;
+  if(d.a==='mk'||d.a==='jn')return home(d.a);
+  if(d.a==='av'){myav=+d.i;app.querySelectorAll('[data-a=av]').forEach(x=>x.classList.toggle('on',x===b));return}
+  if(d.a==='cp')return navigator.clipboard.writeText(location.origin+'/?c='+S.code).then(()=>b.textContent='✅ Đã chép!');
+  if(d.a==='chat'){const i=$('ci');act({a:'chat',x:i.value});i.value='';return}
+  act({a:d.a,to:d.to,i:d.i})};
+app.onkeydown=e=>{if(e.key==='Enter'&&e.target.id==='ci')app.querySelector('[data-a=chat]').click()};
+sess?conn():draw();
+</script></body></html>
